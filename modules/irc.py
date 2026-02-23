@@ -67,16 +67,8 @@ class IRCClient():
                     channel = channelmsg[0]
                     msg = channelmsg[1][1:]
                     if len(channelmsg) > 2:
-                        italic = False
-                        if msg == "ACTION":
-                            msg = "^^^*"
-                            italic = True
-                        
                         for i in range(2, len(channelmsg)):
                             msg = f'{msg} {channelmsg[i]}'
-                        
-                        if italic:
-                            msg = f'{msg}*'
 
                     self.onMessageReceived(user, channel, msg)
 
@@ -88,4 +80,4 @@ class IRCClient():
             self.sendData(f'PRIVMSG {channel} :{msg}')
 
     def sendData(self, data: str):
-        self.socket.send(bytes(f'{data}\r\n', "ascii"))
+        self.socket.send(bytes(f'{data}\r\n', "utf-8"))

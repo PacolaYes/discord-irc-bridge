@@ -101,6 +101,11 @@ class IRCBridge(IRCClient):
     def formattingParse(self, message: str):
         new_msg = message
 
+        # escape characters that we handle formatting for already
+        new_msg = new_msg.replace("*", "\\*") # should handle both bold and italics
+        new_msg = new_msg.replace("_", "\\_") # should handle both italics and underline
+        new_msg = new_msg.replace("~", "\\~")
+
         # ONLY changes IRC formatting into Discord's one, it WILL NOT handle if its one right beside the other
         new_msg = self.__replaceFormatting(new_msg, "\02", "**") # handle bold
         new_msg = self.__replaceFormatting(new_msg, "\x1d", "*") # handle italics
@@ -109,6 +114,13 @@ class IRCBridge(IRCClient):
 
         # just delete the color stuff, not handling all of that :P
         new_msg = re.sub(r"\x03(?P<fg>\d{2})(,(?P<bg>\d{2}))?", "", new_msg) # copied from https://github.com/impredicative/ircstyle/blob/ec4f96e9910f0b896c9b0e84af39700c48f0c192/ircstyle/__init__.py#L135 as im very smart
+
+        split_msg = new_msg.split() # handle /me!
+        if split_msg[0].find("ACTION") != -1:
+            new_msg = f'^^^ *{split_msg[1]}'
+            for i in range(2, len(split_msg)):
+                new_msg = f'{new_msg} {split_msg[i]}'
+            new_msg = new_msg + "*"
 
         return new_msg.strip() # get rid of the rest pls
 
@@ -121,10 +133,10 @@ class IRCBridge(IRCClient):
                 self.sendMessage(user, "Supported types are: png, jpeg, jpg, gif, webp")
         else:
             for discord_channel, irc_channel in channels.items():
+                message = self.formattingParse(message)
+
                 if message == "" or message == " ":
                     message = "** **"
-
-                message = self.formattingParse(message)
 
                 if irc_channel == channel:
                     if self.discord.irc_next_msgs.get(discord_channel):
