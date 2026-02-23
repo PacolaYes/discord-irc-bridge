@@ -1,10 +1,12 @@
 
 from modules.irc import IRCClient # handles base irc functionality
 from modules.settings import getSettings
+from modules.pfp import IRCpfp # handles gettings pfps when going IRC -> discord
 import sys
 import discord
 from discord.ext import tasks
 
+pfp = IRCpfp("pfps.json") # super secure handling of this :))))))
 settings: dict = getSettings("settings.json")
 channels: dict = settings.get("discord-irc_channels")
 
@@ -18,9 +20,9 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
     async def on_message(self, message: discord.Message):
         channel = message.channel.id
 
-        if discord.message.webhook_id:
-            for webhook in await discord.message.channel.webhooks():
-                if webhook.id == discord.message.webhook_id \
+        if message.webhook_id:
+            for webhook in await message.channel.webhooks():
+                if webhook.id == message.webhook_id \
                 and webhook.name == "IRC Bridge":
                     return
 
@@ -56,7 +58,7 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
 
                 for user, messages in user_n_msgs.items():
                     for message in messages:
-                        await foundWebhook.send(content=message, username=user, avatar_url=None)
+                        await foundWebhook.send(content=message, username=user, avatar_url=pfp.pfps.get(user))
             
             self.irc_msgs = {}
 
@@ -64,20 +66,26 @@ class IRCBridge(IRCClient):
     discord: discord.Client
 
     def onMessageReceived(self, user: str, channel: str, message: str):
-        print(user, channel, message)
-        for discord_channel, irc_channel in channels.items():
-            if irc_channel == channel:
-                if self.discord.irc_msgs.get(discord_channel):
-                    users = self.discord.irc_msgs[discord_channel]
+        if channel == self.name:
+            if pfp.changePFP(user, message):
+                self.sendMessage(user, "Successfully updated your Discord pfp!")
+            else:
+                self.sendMessage(user, "Please only send a direct link to an image.")
+                self.sendMessage(user, "Supported types are: png, jpeg, jpg, gif, webp")
+        else:
+            for discord_channel, irc_channel in channels.items():
+                if irc_channel == channel:
+                    if self.discord.irc_msgs.get(discord_channel):
+                        users = self.discord.irc_msgs[discord_channel]
 
-                    if users[user]:
-                        users[user].append(message)
+                        if users[user]:
+                            users[user].append(message)
+                        else:
+                            users[user] = [message]
                     else:
-                        users[user] = [message]
-                else:
-                    self.discord.irc_msgs[discord_channel] = {
-                        user: [message]
-                    }
+                        self.discord.irc_msgs[discord_channel] = {
+                            user: [message]
+                        }
 
 # init discord stuff
 intents = discord.Intents.default()
