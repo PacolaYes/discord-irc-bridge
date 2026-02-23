@@ -2,6 +2,7 @@
 import socket
 import threading
 
+
 class Buffer: # thnak yuo https://stackoverflow.com/a/67826680
     def __init__(self,sock):
         self.sock = sock
@@ -14,7 +15,7 @@ class Buffer: # thnak yuo https://stackoverflow.com/a/67826680
                 return None
             self.buffer += data
         line,sep,self.buffer = self.buffer.partition(b'\r\n')
-        return line.decode()
+        return line.decode("ascii")
 
 class IRCClient():
     __thread: threading.Thread
@@ -60,14 +61,22 @@ class IRCClient():
                 msgPos = text.find("PRIVMSG")
                 if msgPos != -1:
                     full_userid = text[1:(msgPos-1)]
-                    channelmsg = text[msgPos+7:].split()
+                    channelmsg = text[msgPos+8:].split(" ")
 
-                    user = full_userid.split("!")[0].strip()
+                    user = full_userid.split("!")[0]
                     channel = channelmsg[0]
                     msg = channelmsg[1][1:]
                     if len(channelmsg) > 2:
+                        italic = False
+                        if msg == "ACTION":
+                            msg = "^^^*"
+                            italic = True
+                        
                         for i in range(2, len(channelmsg)):
-                            msg = f'{msg} {channelmsg[i].strip()}'
+                            msg = f'{msg} {channelmsg[i]}'
+                        
+                        if italic:
+                            msg = f'{msg}*'
 
                     self.onMessageReceived(user, channel, msg)
 
@@ -79,4 +88,4 @@ class IRCClient():
             self.sendData(f'PRIVMSG {channel} :{msg}')
 
     def sendData(self, data: str):
-        self.socket.send(bytes(f'{data}\r\n', "utf-8"))
+        self.socket.send(bytes(f'{data}\r\n', "ascii"))
