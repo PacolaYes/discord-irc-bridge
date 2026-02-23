@@ -2,6 +2,20 @@
 import socket
 import threading
 
+class Buffer: # thnak yuo https://stackoverflow.com/a/67826680
+    def __init__(self,sock):
+        self.sock = sock
+        self.buffer = b''
+
+    def get_line(self):
+        while b'\r\n' not in self.buffer:
+            data = self.sock.recv(1024)
+            if not data: # socket closed
+                return None
+            self.buffer += data
+        line,sep,self.buffer = self.buffer.partition(b'\r\n')
+        return line.decode()
+
 class IRCClient():
     __thread: threading.Thread
 
@@ -27,37 +41,35 @@ class IRCClient():
         self.__thread.start()
 
     def run(self):
+        buffer = Buffer(self.socket)
         while True:
-            text_bytes = self.socket.recv(2040)
-            text = str(text_bytes.strip())[2:1]
-            print(text)
+            text = buffer.get_line()
+            #print(text)
 
             if text.find("PING") != -1:
                 self.sendData("PONG " + text.split()[1])
             
             split_text = text.split()
-            if len(split_text) < 2:
-                return
+            if len(split_text) >= 2:
+                if split_text[1].find("422") != -1 \
+                or split_text[1].find("376") != -1:
+                    for channel in self.channelList:
+                        self.sendData(f'JOIN {channel}')
+                    self.joinedChannels = True
 
-            if split_text[1].find("422") != -1 \
-            or split_text[1].find("376") != -1:
-                for channel in self.channelList:
-                    self.sendData(f'JOIN {channel}')
-                self.joinedChannels = True
+                msgPos = text.find("PRIVMSG")
+                if msgPos != -1:
+                    full_userid = text[1:(msgPos-1)]
+                    channelmsg = text[msgPos+7:].split()
 
-            msgPos = text.find("PRIVMSG")
-            if msgPos != -1:
-                full_userid = text[1:(msgPos-1)]
-                channelmsg = text[msgPos+7:].split()
+                    user = full_userid.split("!")[0].strip()
+                    channel = channelmsg[0]
+                    msg = channelmsg[1][1:]
+                    if len(channelmsg) > 2:
+                        for i in range(2, len(channelmsg)):
+                            msg = f'{msg} {channelmsg[i].strip()}'
 
-                user = full_userid.split("!")[0].strip()[2:]
-                channel = channelmsg[0]
-                msg = channelmsg[1][1:]
-                if len(channelmsg) > 2:
-                    for i in range(2, len(channelmsg)):
-                        msg = f'{msg} {channelmsg[i].strip()}'
-
-                self.onMessageReceived(user, channel, msg)
+                    self.onMessageReceived(user, channel, msg)
 
     def onMessageReceived(self, user: str, channel: str, msg: str):
         pass
