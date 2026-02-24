@@ -15,7 +15,7 @@ class Buffer: # thnak yuo https://stackoverflow.com/a/67826680
                 return None
             self.buffer += data
         line,sep,self.buffer = self.buffer.partition(b'\r\n')
-        return line.decode("ascii")
+        return line.decode()
 
 class IRCClient():
     __thread: threading.Thread

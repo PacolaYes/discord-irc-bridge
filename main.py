@@ -21,6 +21,56 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
     irc_msgs: dict = {}
     irc_next_msgs: dict = {}
 
+    def __replaceChannels(self, message: str):
+        new_msg = message
+        
+        # send "\I*channel not available*\I" where \I toggles italic
+        for match in re.finditer(r'<#[0-9]+>', message):
+            channelstr = match.group(0)
+            channelid = channelstr[2:-1]
+
+            replace_str = channels.get(channelid)
+            if not replace_str:
+                replace_str = "\x1d*channel not available*\x1d"
+
+            new_msg = new_msg.replace(channelstr, replace_str, 1)
+        return new_msg
+    
+    def __replaceFormatting(self, message: str, regex: str, replace: str):
+        new_msg = ""
+        
+        regex_len = len(regex.replace(r'\*', "*"))
+        # send "\I*channel not available*\I" where \I toggles italic
+        prev_end = 0
+        found = False
+        for match in re.finditer(rf'{regex}[\s\S]+?{regex}', message):
+            print(f"Found match for {regex}!")
+            found = True
+            start = match.start()
+            end = match.end()
+
+            print(message[end:])
+            new_msg = new_msg + message[prev_end:start] + replace + message[start + regex_len:end-regex_len] + replace
+            prev_end = end
+
+        if not found:
+            return message
+        else:
+            new_msg = new_msg + message[prev_end:]
+        
+        return new_msg
+
+    def formattingParse(self, message: str):
+        new_msg = self.__replaceChannels(message)
+
+        new_msg = self.__replaceFormatting(new_msg, r'\*\*', '\x02') # handle bold
+        new_msg = self.__replaceFormatting(new_msg, r'\*', '\x1d') # handle italics
+        new_msg = self.__replaceFormatting(new_msg, r'__', '\x1f') # handle underline
+        new_msg = self.__replaceFormatting(new_msg, r'_', '\x1d') # handle italics²
+        new_msg = self.__replaceFormatting(new_msg, r'~~', '\x1e') # handle strikethrough
+
+        return new_msg
+
     async def on_message(self, message: discord.Message):
         channel = message.channel.id
 
@@ -32,15 +82,13 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
 
         irc_channel = channels.get(str(channel))
         if irc_channel:
-            lines = message.content.splitlines()
+            msg = self.formattingParse(message.content)
+
+            lines = msg.split("\n")
 
             self.irc.sendMessage(irc_channel, f'<{message.author.display_name}> {lines[0]}')
-            i = 0
-            for line in lines:
-                if i != 0:
-                    self.irc.sendMessage(irc_channel, line)
-
-                i += 1
+            for i in range(1, len(lines)):
+                self.irc.sendMessage(irc_channel, f'^^^ {lines[i]}')
 
     async def setup_hook(self):
         self.sendStoredMessages.start()
