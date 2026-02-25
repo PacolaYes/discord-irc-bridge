@@ -71,8 +71,34 @@ class IRCClient():
                             msg = f'{msg} {channelmsg[i]}'
 
                     self.onMessageReceived(user, channel, msg)
+                
+                msgPos = text.find("QUIT")
+                joinPos = text.find("JOIN")
+                if msgPos != -1 or joinPos != -1:
+                    full_userid = text[1:(msgPos-1)]
+                    split_msg = text[msgPos+8:].split(" ")
+
+                    user = full_userid.split("!")[0]
+                    msg = split_msg[0][1:]
+                    if len(msg) > 1:
+                        for i in range(1, len(split_msg)):
+                            msg = f'{msg} {split_msg[i]}'
+                    
+                    if msgPos != -1:
+                        self.onUserLeave(user, msg)
+                    elif joinPos != -1:
+                        self.onUserJoin(user, split_msg[0])
+
+    def quit(self, reason: str):
+        self.sendData(bytes(f'QUIT {reason}', "utf-8"))
 
     def onMessageReceived(self, user: str, channel: str, msg: str):
+        pass
+
+    def onUserLeave(self, user: str, message: str):
+        pass
+
+    def onUserJoin(self, user: str, channel: str):
         pass
 
     def sendMessage(self, channel: str, msg: str):

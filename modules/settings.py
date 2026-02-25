@@ -20,7 +20,8 @@ def getSettings(path: str):
             },
             "irc_host": "localhost",
             "irc_port": 6667,
-            "irc_name": "discordBridge"
+            "irc_name": "discordBridge",
+            "broadcast-join-leaves": True
         }
         with open(truePath, "x") as file:
             file.write(json.dumps(base_json, indent=4))
