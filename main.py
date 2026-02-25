@@ -10,6 +10,7 @@ import validators
 
 import sys
 import atexit
+import signal
 import re
 
 pfp = IRCpfp("pfps.json") # super secure handling of this :))))))
@@ -143,6 +144,13 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
     async def setup_hook(self):
         self.sendStoredMessages.start()
 
+    def __handleIRCPings(self, match: re.Match):
+        for member in self.get_all_members():
+            if member.name == match[0][1:]:
+                return f'<@{member.id}>'
+        
+        return match[0]
+
     @tasks.loop(seconds=0.2)
     async def sendStoredMessages(self):
         if len(self.irc_msgs) <= 0:
@@ -176,6 +184,8 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
                     message = dictionary.get("message")
                     if reply_user and self.stored_messages.get(reply_user):
                         message = f'-# ↩ {reply_user}: "{self.stored_messages[reply_user][1:100]}"\n{message}'
+
+                    message = re.sub(r'@\w+', self.__handleIRCPings, message)
 
                     self.stored_messages[user] = await foundWebhook.send(content=message, username=user, avatar_url=pfp.pfps.get(user))
 
@@ -325,6 +335,7 @@ class IRCBridge(IRCClient):
 # init discord stuff
 intents = discord.Intents.default()
 intents.message_content = True
+intents.members = True
 discord_bot = DiscordClient(intents=intents)
 
 # init irc stuff
@@ -335,9 +346,14 @@ discord_bot.irc = irc
 irc.discord = discord_bot
 
 def onExit():
-    irc.quit("Bridge closed.")
+    try: 
+        irc.quit("Bridge closed.")
+    finally:
+        print("bye")
 
 atexit.register(onExit)
+signal.signal(signal.SIGINT, onExit)
+signal.signal(signal.SIGTERM, onExit)
 
 irc.start()
 discord_bot.run(settings["discord_token"])
