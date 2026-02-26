@@ -153,11 +153,12 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
 
     @tasks.loop(seconds=0.2)
     async def sendStoredMessages(self):
-        if len(self.irc_msgs) <= 0:
+        msgs_len = len(self.irc_msgs)
+        if msgs_len <= 0:
             self.irc_msgs = self.irc_next_msgs
             self.irc_next_msgs = {}
 
-        if len(self.irc_msgs) > 0:
+        if msgs_len > 0:
             for channelid, msgs in self.irc_msgs.items():
                 channel = self.get_channel(int(channelid))
 
@@ -193,6 +194,7 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
 
 class IRCBridge(IRCClient):
     discord: DiscordClient
+    hasOpened = False
 
     def __replaceFormatting(self, msg: str, formatting: str, replacement: str):
         isFormatting = False
@@ -269,13 +271,22 @@ class IRCBridge(IRCClient):
 
         return new_msg.strip() # get rid of the rest pls
 
-    def onMessageReceived(self, user: str, channel: str, message: str):
-        if channel == self.name:
-            if pfp.changePFP(user, message):
+    def __handleCommands(self, user: str, message: str):
+        if message.startswith("pfp"):
+            if pfp.changePFP(user, message[4:]):
                 self.sendMessage(user, "Successfully updated your Discord pfp!")
             else:
-                self.sendMessage(user, "Please only send a direct link to an image.")
-                self.sendMessage(user, "Supported types are: png, jpeg, jpg, gif, webp")
+                self.sendMessage(user, "Please supply a direct link to an image.")
+        elif message.startswith("list"):
+            user_regex = message[5:]
+            self.sendMessage(user, f'TEMPORARY: Listing members is yet to be done, your regex was: {user_regex}')
+        else:
+            self.sendMessage(user, "pfp (link) - changes ur pfp to the specified link, must be a direct link to the image!")
+            self.sendMessage(user, "list (regex) - list all discord members whose display name fall under the supplied regex.")
+
+    def onMessageReceived(self, user: str, channel: str, message: str):
+        if channel == self.name:
+            self.__handleCommands(user, message)
         else:
             for discord_channel, irc_channel in channels.items():
                 message = self.formattingParse(message)
@@ -304,33 +315,36 @@ class IRCBridge(IRCClient):
     def onUserLeave(self, user: str, message: str):
         if user == self.name:
             message = "Bridge closed."
-        elif not settings.get("broadcast-join-leaves"):
+        elif not settings.get("discord_broadcast_join-leaves"):
             return
 
         dictionary = {
             "message": f'{user} has left ({message})'
         }
         
-        for discord_channel in channels.keys():
-            if self.discord.irc_next_msgs.get(discord_channel):
-                self.discord.irc_next_msgs[discord_channel].append(dictionary)
-            else:
-                self.discord.irc_next_msgs[discord_channel] = [dictionary]
+        discord_channel = settings.get("discord_join-leaves_channel")
+        if self.discord.irc_next_msgs.get(discord_channel):
+            self.discord.irc_next_msgs[discord_channel].append(dictionary)
+        else:
+            self.discord.irc_next_msgs[discord_channel] = [dictionary]
     
     def onUserJoin(self, user: str, channel: str):
         dictionary: dict = {}
-        if user == self.name:
+        if user == self.name and not self.hasOpened:
             dictionary["message"] = "Bridge opened."
-        elif not settings.get("broadcast-join-leaves"):
+            self.hasOpened = True
+        elif not settings.get("discord_broadcast_join-leaves"):
             return
         else:
             dictionary["message"] = f'{user} has joined ({channel})'
         
-        for discord_channel in channels.keys():
-            if self.discord.irc_next_msgs.get(discord_channel):
-                self.discord.irc_next_msgs[discord_channel].append(dictionary)
-            else:
-                self.discord.irc_next_msgs[discord_channel] = [dictionary]
+        discord_channel = settings.get("discord-join-leaves-channel")
+        for irc_channel in channels.values():
+            if irc_channel == channel[1:]:
+                if self.discord.irc_next_msgs.get(discord_channel):
+                    self.discord.irc_next_msgs[discord_channel].append(dictionary)
+                else:
+                    self.discord.irc_next_msgs[discord_channel] = [dictionary]
 
 # init discord stuff
 intents = discord.Intents.default()
@@ -340,7 +354,7 @@ discord_bot = DiscordClient(intents=intents)
 
 # init irc stuff
 irc_channels = list(channels.values())
-irc = IRCBridge(settings["irc_host"], settings["irc_port"], settings["irc_name"], irc_channels)
+irc = IRCBridge(settings["irc_host"], settings["irc_port"], settings["irc_name"], irc_channels, settings.get("irc_password"))
 
 discord_bot.irc = irc
 irc.discord = discord_bot

@@ -1,7 +1,7 @@
 
 import socket
 import threading
-
+import time
 
 class Buffer: # thnak yuo https://stackoverflow.com/a/67826680
     def __init__(self,sock):
@@ -19,16 +19,24 @@ class Buffer: # thnak yuo https://stackoverflow.com/a/67826680
 
 class IRCClient():
     __thread: threading.Thread
-
     socket: socket.socket
+
     name: str
+    password: str = None
+
+    identified: bool = False
+    prevTime: float = 0
     joinedChannels: bool = False
     channelList = []
 
-    def __init__(self, ip: str, port: int, nick: str, channels: list):
+    def __init__(self, ip: str, port: int, nick: str, channels: list, password):
         self.joinedChannels = False # making sure!
         self.__thread = threading.Thread(name='ircthink', target=self.run)
+
         self.name = nick
+        self.password = password # super necessary
+
+        self.prevTime = time.perf_counter()
         
         self.socket = socket.socket()
         self.socket.connect((ip, port))
@@ -37,7 +45,6 @@ class IRCClient():
         self.sendData(f'NICK {nick}')
         self.sendData(f'USER {nick} 0 * :Discord bridge')
         self.channelList = channels
-
     def start(self): # alias for IRCClient.__thread.start
         self.__thread.start()
 
@@ -45,17 +52,22 @@ class IRCClient():
         buffer = Buffer(self.socket)
         while True:
             text = buffer.get_line()
-            #print(text)
+            print(text)
 
             if text.find("PING") != -1:
                 self.sendData("PONG " + text.split()[1])
+
+            if self.joinedChannels and self.password and not self.identified:
+                self.sendMessage("NickServ", f'IDENTIFY {self.password}')
+                self.identified = True
             
             split_text = text.split()
             if len(split_text) >= 2:
-                if split_text[1].find("422") != -1 \
-                or split_text[1].find("376") != -1:
+                if split_text[1] == "422" \
+                or split_text[1] == "376":
                     for channel in self.channelList:
                         self.sendData(f'JOIN {channel}')
+
                     self.joinedChannels = True
 
                 msgPos = text.find("PRIVMSG")
@@ -75,8 +87,14 @@ class IRCClient():
                 msgPos = text.find("QUIT")
                 joinPos = text.find("JOIN")
                 if msgPos != -1 or joinPos != -1:
-                    full_userid = text[1:(msgPos-1)]
-                    split_msg = text[msgPos+8:].split(" ")
+                    full_userid = text
+                    split_msg = []
+                    if msgPos != -1:
+                        full_userid = text[1:(msgPos-1)]
+                        split_msg = text[msgPos+5:].split(" ")
+                    elif joinPos != -1:
+                        full_userid = text[1:(joinPos-1)]
+                        split_msg = text[joinPos+5:].split(" ")
 
                     user = full_userid.split("!")[0]
                     msg = split_msg[0][1:]

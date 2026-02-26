@@ -18,10 +18,12 @@ def getSettings(path: str):
             "discord-irc_channels": {
                 "1234567890": "#temp"
             },
+            "discord-join-leaves-channel": "1234567890",
+            "discord_broadcast_join-leaves": True,
             "irc_host": "localhost",
             "irc_port": 6667,
             "irc_name": "discordBridge",
-            "broadcast-join-leaves": True
+            "irc_password": None
         }
         with open(truePath, "x") as file:
             file.write(json.dumps(base_json, indent=4))
