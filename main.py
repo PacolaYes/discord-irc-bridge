@@ -6,7 +6,7 @@ from modules.pfp import IRCpfp # handles gettings pfps when going IRC -> discord
 import discord
 from discord.ext import tasks
 import dismoji
-import validators
+from urllib.parse import urlparse
 
 import sys
 import atexit
@@ -24,6 +24,15 @@ if channels is None:
 # Posted by Hazzu, modified by community. See post 'Timeline' for change history
 # Retrieved 2026-02-24, License - CC BY-SA 4.0
 EMOJI_REGEX = r'<(?P<animated>a?):(?P<name>[a-zA-Z0-9_]{2,32}):(?P<id>[0-9]{18,22})>'
+
+# Source - https://overflow.hostux.net/questions/7160737/how-to-validate-a-url-in-python-malformed-or-not#38020041
+# yes it is an evil thingie
+def validateURL(url):
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except AttributeError:
+        return False
 
 class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py already handles base functionality
     irc: IRCClient
@@ -89,7 +98,7 @@ class DiscordClient(discord.Client): # handle discord -> irc here, as discord.py
         new_msg = ""
 
         for cur_msg in split_msg:
-            if not validators.url(cur_msg):
+            if not validateURL(cur_msg):
                 cur_msg = self.__replaceFormatting(cur_msg, '**', '\x02') # handle bold
                 cur_msg = self.__replaceFormatting(cur_msg, '*', '\x1d') # handle italics
                 cur_msg = self.__replaceFormatting(cur_msg, '__', '\x1f') # handle underline
@@ -241,7 +250,7 @@ class IRCBridge(IRCClient):
 
         # TODO: prob find a better way for this
         for msg in split_msg:
-            if not validators.url(msg):
+            if not validateURL(msg):
                 msg = dismoji.emojize(msg)
                 msg = self.convertChannel(msg)
 
